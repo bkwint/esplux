@@ -6,9 +6,10 @@
 #include <ArduinoJson.h>
 
 // if DEBUG_MODE is enabled serial output is enabled as well
-#define DEBUG_MODE 1
+#define DEBUG_SERIAL_ENABLED false
+#define DEBUG_SERIAL if (DEBUG_SERIAL_ENABLED)Serial
 
-// WIFI configuration
+// WIFI configuration, wifi SSID and the wifi password
 #define WIFI_HOST "ESPLux"
 #define WIFI_SSID ""
 #define WIFI_PASS ""
@@ -16,6 +17,7 @@
 // MQTT configuration
 #define MQTT_TOPIC "esplux/livingroom"
 
+// Modify the below broker ip address to the ip address you like to use
 IPAddress broker(192,168,1,250);
 WiFiClient wclient;
 
@@ -26,52 +28,37 @@ const int jsonCapacity = JSON_OBJECT_SIZE(50);
 Adafruit_TSL2561_Unified tsl = Adafruit_TSL2561_Unified(0x39, 12345);
 
 void setup() {
-  #ifdef DEBUG_MODE
-  // put your setup code here, to run once:
-  Serial.begin(9600);
-  #endif
+  DEBUG_SERIAL.begin(9600);
 
   // setup wifi
   WiFi.hostname(WIFI_HOST);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
-  #ifdef DEBUG_MODE
-  Serial.print("Connecting to wifi");
-  #endif
+  DEBUG_SERIAL.print("Connecting to wifi");
   
   while(WiFi.status() != WL_CONNECTED) {
     delay(500);
-    #ifdef DEBUG_MODE
-    Serial.print(".");
-    #endif
+    DEBUG_SERIAL.print(".");
   }
 
-  #ifdef DEBUG_MODE
-  Serial.println();
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
-  #endif
+  DEBUG_SERIAL.println();
+  DEBUG_SERIAL.print("IP: ");
+  DEBUG_SERIAL.println(WiFi.localIP());
 
   // setup the mqtt sender
   client.setServer(broker, 1883);
   String clientId = "ESP8266Client-";
   clientId += String(random(0xffff), HEX);
-  #ifdef DEBUG_MODE
-  Serial.println(clientId);
-  #endif
+  DEBUG_SERIAL.println(clientId);
   while (!client.connected()) {
     if (client.connect(clientId.c_str())) {
-      #ifdef DEBUG_MODE
-      Serial.println("Connected to mqtt");
-      #endif
+      DEBUG_SERIAL.println("Connected to mqtt");
     }
   }
 
   // setup the lux sensor
   if (tsl.begin()) {
-    #ifdef DEBUG_MODE
-    Serial.println("Sensor found");
-    #endif
+    DEBUG_SERIAL.println("Sensor found");
 
     // We always asume no gain to make it work as best as possible
     tsl.setGain(TSL2561_GAIN_1X);
@@ -79,9 +66,7 @@ void setup() {
     tsl.setIntegrationTime(TSL2561_INTEGRATIONTIME_13MS);
   }
   else {
-    #ifdef DEBUG_MODE
-    Serial.println("Sensor not found");
-    #endif
+    DEBUG_SERIAL.println("Sensor not found");
   }
 }
 
@@ -94,19 +79,16 @@ void loop() {
   if (event.light)
   {
     if (client.connected()) {
-      #ifdef DEBUG_MODE
-      Serial.print(event.light); Serial.println(" lux");
-      #endif
+      DEBUG_SERIAL.print(event.light); DEBUG_SERIAL.println(" lux");
+
       char output[128];
       StaticJsonDocument<jsonCapacity> doc;
       doc["lux"] = event.light;
 
       serializeJson(doc, output);
       if (client.publish(MQTT_TOPIC, output)) {
-        #ifdef DEBUG_MODE
-        Serial.println("Published");
-        Serial.println(output);
-        #endif
+        DEBUG_SERIAL.println("Published");
+        DEBUG_SERIAL.println(output);
       }
     }
   }
@@ -116,7 +98,7 @@ void loop() {
   // goes to sleep to quickly for the tcp package to have been send
   client.disconnect();
 
-  #ifdef DEBUG_MODE
+  #if DEBUG_SERIAL_ENABLED
   // sleep for 5 seconds if we work in debug mode
   ESP.deepSleep(5e6);
   #else
